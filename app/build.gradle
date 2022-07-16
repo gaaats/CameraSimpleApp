@@ -56,9 +56,20 @@ dependencies {
     // Lifecycle
     implementation "androidx.lifecycle:lifecycle-runtime-ktx:2.5.0"
 
-    //EasyPermissionManager
-//    implementation 'com.vmadalin:easypermissions-ktx:1.0.0'
-//    implementation 'com.github.DJSeokHo:EasyPermissionManager:1.0.9'
-//    implementation 'com.github.DJSeokHo:EasyPermissionManager:1.0.9'
+    // CAMERA_X
+
+    // CameraX core library using the camera2 implementation
+    def camerax_version = "1.1.0-alpha08"
+    // The following line is optional, as the core library is included indirectly by camera-camera2
+    implementation "androidx.camera:camera-core:${camerax_version}"
+    implementation "androidx.camera:camera-camera2:${camerax_version}"
+    // If you want to additionally use the CameraX Lifecycle library
+    implementation "androidx.camera:camera-lifecycle:${camerax_version}"
+    // If you want to additionally use the CameraX View class
+    implementation "androidx.camera:camera-view:1.2.0-alpha03"
+    // If you want to additionally use the CameraX Extensions library
+    implementation "androidx.camera:camera-extensions:1.2.0-alpha03"
+
+
 
 }

@@ -1,133 +1,83 @@
 package com.example.camerasimpleapp
 
-import android.Manifest
-import android.net.Uri
+import android.annotation.SuppressLint
+import android.media.Image
 import android.os.Bundle
-import android.os.Environment
-import android.util.Log
-import androidx.activity.result.contract.ActivityResultContracts
+import android.util.Size
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.FileProvider
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.core.content.ContextCompat
 import com.example.camerasimpleapp.databinding.ActivityMainBinding
 import com.swein.easypermissionmanager.EasyPermissionManager
-import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
-    private var tempImgUri: Uri? = null
-    private var tempImgFilePath: String = ""
-    private var callBack: ((MutableMap<String, Boolean>) -> Unit)? = null
     private var _binding: ActivityMainBinding? = null
     private val binding get() = _binding ?: throw RuntimeException("ActivityMainBinding = null")
     private val easyPermissionManager = EasyPermissionManager(this)
-
-    private val registerPermissionCameraLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            if (!it.values.contains(false)) {
-
-            }
-        }
-
-    private val registerPermissionAlbumLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            if (!it.values.contains(false)) {
-                selectPictureLauncherAlbum.launch("image/*")
-            }
-        }
-
-
-    private val selectPictureLauncherAlbum =
-        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-            if (uri != null) {
-                Log.d("MY_TAG", "selectPictureLauncherAlbum GOOD")
-                binding.imgPhoto.setImageURI(uri)
-            } else {
-                Log.d("MY_TAG", "selectPictureLauncherAlbum BAD")
-            }
-        }
-    private val cameraLauncher =
-        registerForActivityResult(ActivityResultContracts.TakePicture()) { isPhotoMade ->
-            if (isPhotoMade) {
-                Log.d("MY_TAG", "cameraLauncher GOOD")
-                binding.imgPhoto.setImageURI(tempImgUri)
-            } else {
-                Log.d("MY_TAG", "cameraLauncher BAD")
-            }
-        }
+    private val cameraProviderFuture by lazy {
+        ProcessCameraProvider.getInstance(this)
+    }
+    private val mapperYUVtoRGB = YUVtoRGB()
+    private val mapperConverotrJava = Convertor()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         _binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.btnMakePhoto.setOnClickListener {
-            easyPermissionManager.requestPermission(
-                "permission",
-                "please CONFIRM permission",
-                "confirm",
-                arrayOf(Manifest.permission.CAMERA)
-            ) {
-                launchCamera()
+        easyPermissionManager.requestPermission(
+            "Permission Camera",
+            "i need permission Camera",
+            "accept",
+            arrayOf(android.Manifest.permission.CAMERA)
+        ) {
+            initCamera()
+        }
+
+
+    }
+
+    @SuppressLint("UnsafeOptInUsageError")
+    private fun initCamera() {
+        cameraProviderFuture.addListener({
+            val processCameraProvider = cameraProviderFuture.get()
+            // todo:for preview
+//            val preview = Preview.Builder().build()
+            // todo:for imageCapture
+//            val imageCapture = ImageCapture.Builder().build()
+
+            //задаємо приблизні параметри зобораження
+            val imageAnalysis = ImageAnalysis.Builder()
+                .setTargetResolution(Size(1024, 720))
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_BLOCK_PRODUCER)
+                .build()
+
+            // обираємо камеру
+            val cameraSelector = CameraSelector.Builder()
+                .requireLensFacing(CameraSelector.LENS_FACING_BACK)
+                .build()
+
+            // додаємо обработчик подій
+            imageAnalysis.setAnalyzer(ContextCompat.getMainExecutor(this)){
+                val img: Image = it.image!!
+
+//                val bitmap = mapperYUVtoRGB.translateYUV(img, this)
+                val bitmap = mapperConverotrJava.translateYUV(img, this)
+
+                // дізнаємося у *it* орієнтасію і ставимо у нашого превью таку ж саму
+                binding.imgPhoto.rotation = it.imageInfo.rotationDegrees.toFloat()
+                binding.imgPhoto.setImageBitmap(bitmap)
+                img.close()
             }
 
+            // головна фун тут, яка запускає все + прив'язка до життєвого сайкл
+            processCameraProvider.bindToLifecycle(this, cameraSelector, imageAnalysis)
 
-//            registerPermissionCameraLauncher.launch(arrayOf(Manifest.permission.CAMERA))
-        }
-        binding.btnAlbum.setOnClickListener {
+        }, ContextCompat.getMainExecutor(this))
 
-
-//            registerPermissionAlbumLauncher.launch(arrayOf(
-//                Manifest.permission.READ_EXTERNAL_STORAGE,
-//                Manifest.permission.WRITE_EXTERNAL_STORAGE,
-//            ))
-        }
-    }
-    private fun launchEasyManagerPermAndAddFunTodo (func: Runnable){
-
-    }
-
-
-//    private fun launchEasyManagerPermAndAddFunTodo(arrayPermissions: Array<String>, func: ()-> Unit) {
-//        easyPermissionManager.requestPermission(
-//            "permission",
-//            "please CONFIRM permission",
-//            "confirm",
-//            arrayPermissions
-//        ) {
-//            launchCamera()
-//        }
-//    }
-
-    private fun launchCamera() {
-        tempImgUri = FileProvider.getUriForFile(
-            this@MainActivity,
-            "${BuildConfig.APPLICATION_ID}.fileprovider",
-            createImgFile().also {
-                tempImgFilePath = it.absolutePath
-            })
-        cameraLauncher.launch(tempImgUri)
-    }
-
-    private fun createImgFile(): File {
-        val storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-        return File.createTempFile("temp_image", ".jpg", storageDir)
-    }
-
-//    private fun requestPermissions(vararg : String) {
-    //single premissiom
-//        registerPermissionLauncher.launch(Manifest.permission.CAMERA)
-
-//        registerPermissionLauncher.launch(
-//            arrayOf(vararg)
-//                Manifest.permission.CAMERA,
-//                Manifest.permission.READ_EXTERNAL_STORAGE,
-//                Manifest.permission.WRITE_EXTERNAL_STORAGE
-//            )
-//
-//    }
-
-    companion object {
-        private const val REQUEST_CODE_CAMERA = 111
     }
 
     override fun onDestroy() {
@@ -135,115 +85,4 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 }
-
-
-//    private val registerPermissionLauncher by lazy {
-//        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-//            if (null == it.values.find { it == false }) {
-//                binding.btnMakePhoto.setOnClickListener {
-//                    tempImgUri = FileProvider.getUriForFile(
-//                        this@MainActivity,
-//                        "${BuildConfig.APPLICATION_ID}.fileprovider",
-//                        createImgFile().also {
-//                            tempImgFilePath = it.absolutePath
-//                        })
-//                    cameraLauncher.launch(tempImgUri)
-//                }
-//
-//                binding.btnAlbum.setOnClickListener {
-//                    selectPictureLauncherAlbum.launch("image/*")
-//                }
-//                it.forEach {
-//                    Log.d("MY_TAG", "${it.key} is: ${it.value}")
-//                }
-//            }
-//        }
-//    }
-
-
-//    private val simpleCameraLauncher =
-//        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-//            if (it.resultCode == RESULT_OK && it.data != null) {
-//                val bundle: Bundle = it.data!!.extras!!
-//                val bitmap = bundle.get("data") as Bitmap
-//                binding.imgPhoto.setImageBitmap(bitmap)
-//            }
-//        }
-
-// use ActivityResultContracts.PickContact()
-
-
-//    @SuppressLint("QueryPermissionsNeeded")
-
-//        val intentCamera = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-
-//        binding.btnMakePhoto.setOnClickListener {
-//            callBack = {
-//                if (null == it.values.find { it == false }) {
-//                    it.forEach {
-//                        Log.d("MY_TAG", "${it.key} is: ${it.value}")
-//                    }
-//                    tempImgUri = FileProvider.getUriForFile(
-//                        this@MainActivity,
-//                        "${BuildConfig.APPLICATION_ID}.fileprovider",
-//                        createImgFile().also {
-//                            tempImgFilePath = it.absolutePath
-//                        })
-//                    cameraLauncher.launch(tempImgUri)
-//                }
-//            }
-//            requestPermissions()
-
-//        binding.btnMakePhoto.setOnClickListener {
-//            requestPermissions()
-//            if (intentCamera.resolveActivity(packageManager) != null) {
-//                simpleCameraLauncher.launch(intentCamera)
-//            } else {
-//                Log.d("MY_TAG", "there is no app to resolve this intent")
-//            }
-//        }
-
-//
-//        binding.btnMakePhoto.setOnClickListener {
-//
-//            val job1 = lifecycleScope.launch {
-//                registerPermissionLauncher.launch(
-//                    arrayOf(
-//                        Manifest.permission.CAMERA
-//                    )
-//                )
-//            }
-//            val job2 = lifecycleScope.launch {
-//                tempImgUri = FileProvider.getUriForFile(
-//                    this@MainActivity,
-//                    "${BuildConfig.APPLICATION_ID}.fileprovider",
-//                    createImgFile().also {
-//                        tempImgFilePath = it.absolutePath
-//                    })
-//                cameraLauncher.launch(tempImgUri)
-//            }
-//            lifecycleScope.launch{
-//                job1.join()
-//                job2.join()
-//            }
-//
-//        }
-
-//        binding.btnAlbum.setOnClickListener {
-//            val job1 = lifecycleScope.async {
-//                registerPermissionLauncher.launch(
-//                    arrayOf(
-//                        Manifest.permission.READ_EXTERNAL_STORAGE,
-//                        Manifest.permission.WRITE_EXTERNAL_STORAGE
-//                    )
-//                )
-//            }
-//            lifecycleScope.async {
-//                job1.await()
-//                selectPictureLauncherAlbum.launch("image/*")
-//            }
-//        }
-
-
-
 
